@@ -376,7 +376,7 @@ function Index() {
             </p>
             <h1 className="font-display text-4xl leading-tight font-semibold sm:text-5xl lg:text-6xl">
               Your paper menu, reborn as a{" "}
-              <em className="text-primary not-italic italic">digital page</em>.
+              <em className="text-primary">digital page</em>.
             </h1>
             <p className="mt-5 text-lg text-muted-foreground">
               Snap a photo of your menu. MenuSnap's AI reads every dish, description and

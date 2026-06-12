@@ -109,6 +109,15 @@ function MenuPage() {
 
   return (
     <main className="min-h-screen pb-16">
+      {menu.isDemo ? (
+        <div className="bg-primary/5 border-b border-primary/10 px-4 py-3 text-center text-xs text-primary flex items-center justify-center gap-2">
+          <Sparkles className="h-3.5 w-3.5 shrink-0" />
+          <span>
+            This is a mock menu created in <strong>Demo Mode</strong>. Configure a valid Gemini API key to use your own menus.
+          </span>
+        </div>
+      ) : null}
+
       <header className="border-b">
         <div className="mx-auto max-w-2xl px-5 py-14 text-center sm:py-20">
           <p className="animate-fade-in text-xs font-medium tracking-[0.35em] text-primary uppercase">

@@ -1,7 +1,5 @@
-import {
-  compressToEncodedURIComponent,
-  decompressFromEncodedURIComponent,
-} from "lz-string";
+import lzString from "lz-string";
+const { compressToEncodedURIComponent, decompressFromEncodedURIComponent } = lzString;
 
 export interface MenuItem {
   id: string;
@@ -19,6 +17,7 @@ export interface MenuCategory {
 export interface MenuData {
   restaurantName: string;
   categories: MenuCategory[];
+  isDemo?: boolean;
 }
 
 /** Shape returned by the AI extraction server function (no ids). */
@@ -28,6 +27,7 @@ export interface ExtractedMenu {
     name: string;
     items: { name: string; description: string; price: string }[];
   }[];
+  isDemo?: boolean;
 }
 
 export function createId(length = 8): string {
@@ -51,6 +51,7 @@ export function withIds(raw: ExtractedMenu): MenuData {
         price: item.price ?? "",
       })),
     })),
+    isDemo: raw.isDemo,
   };
 }
 

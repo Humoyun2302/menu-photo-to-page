@@ -3,7 +3,8 @@ import { z } from "zod";
 
 import type { ExtractedMenu } from "./menu-data";
 
-const AI_GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 const rawItemSchema = z.object({
   name: z.string(),
@@ -23,17 +24,74 @@ const rawMenuSchema = z.object({
     .default([]),
 });
 
-const EXTRACTION_PROMPT = `Extract the complete menu from this photo of a restaurant menu.
+const SYSTEM_PROMPT = `You are a menu digitizer. Extract all items from this restaurant menu photo. Return ONLY valid JSON in this exact format, no markdown, no explanation: { "restaurantName": "...", "categories": [{ "name": "...", "items": [{ "name": "...", "description": "...", "price": "..." }] }] }`;
 
-Return JSON with EXACTLY this shape:
-{"restaurantName": string, "categories": [{"name": string, "items": [{"name": string, "description": string, "price": string}]}]}
+/**
+ * Parse a data-URL into the mimeType and raw base64 payload that the
+ * Gemini vision API expects.
+ */
+function parseDataUrl(dataUrl: string): { mimeType: string; base64Data: string } {
+  const match = dataUrl.match(/^data:(image\/[^;]+);base64,(.+)$/s);
+  if (!match) throw new Error("Invalid image data URL");
+  return { mimeType: match[1], base64Data: match[2] };
+}
 
-Rules:
-- Include every item you can read, grouped under their printed section headings (e.g. Starters, Mains, Desserts). If there are no headings, use a single category named "Menu".
-- Keep prices exactly as printed, including the currency symbol (e.g. "$12.50", "9€"). Use "" if no price is shown.
-- Use "" for items without a description. Never invent dishes, descriptions, or prices.
-- If the restaurant name is not visible, use "My Restaurant".
-- Respond with raw JSON only — no markdown, no commentary.`;
+const MOCK_MENU: ExtractedMenu = {
+  isDemo: true,
+  restaurantName: "Matcha Club",
+  categories: [
+    {
+      name: "Breakfasts (Завтраки)",
+      items: [
+        {
+          name: "Oatmeal with fresh berries",
+          description: "Oatmeal, coconut milk, seasonal berries, honey, chia seeds",
+          price: "90.00",
+        },
+        {
+          name: "Grechka with mushrooms & poached egg",
+          description: "Buckwheat, wild mushrooms, spinach, poached egg, parmesan",
+          price: "110.00",
+        },
+        {
+          name: "Scramble with avocado",
+          description: "Scrambled eggs, fresh avocado, sourdough toast, mixed greens",
+          price: "140.00",
+        },
+      ],
+    },
+    {
+      name: "Poke & Bowls (Поке и Боулы)",
+      items: [
+        {
+          name: "Poke Bowl with Salmon",
+          description: "Salmon, sushi rice, edamame, cucumber, avocado, spicy mayo",
+          price: "145.00",
+        },
+        {
+          name: "Green Vegan Bowl",
+          description: "Quinoa, broccoli, avocado, spinach, cucumber, green dressing",
+          price: "120.00",
+        },
+      ],
+    },
+    {
+      name: "Drinks & Desserts (Напитки и Десерты)",
+      items: [
+        {
+          name: "Matcha Latte",
+          description: "Ceremonial grade matcha with oat milk",
+          price: "70.00",
+        },
+        {
+          name: "San Sebastian Cheesecake",
+          description: "Creamy Basque cheesecake with a burnt top",
+          price: "80.00",
+        },
+      ],
+    },
+  ],
+};
 
 export const extractMenu = createServerFn({ method: "POST" })
   .inputValidator(
@@ -44,51 +102,66 @@ export const extractMenu = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }): Promise<ExtractedMenu> => {
-    const apiKey = process.env.LOVABLE_API_KEY;
-    if (!apiKey) throw new Error("AI is not configured for this project.");
+    const rawApiKey = process.env.VITE_GEMINI_API_KEY;
+    const apiKey = rawApiKey ? rawApiKey.trim() : undefined;
+    const isMock = !apiKey || apiKey === "" || apiKey === "your_api_key_here";
 
-    const response = await fetch(AI_GATEWAY_URL, {
+    if (isMock) {
+      console.warn("Using mock fallback menu because VITE_GEMINI_API_KEY is not configured.");
+      return MOCK_MENU;
+    }
+
+    const { mimeType, base64Data } = parseDataUrl(data.imageDataUrl);
+
+    const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are an expert at reading photographs of restaurant menus and transcribing them with perfect accuracy. You always respond with valid JSON only.",
-          },
+        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        contents: [
           {
             role: "user",
-            content: [
-              { type: "text", text: EXTRACTION_PROMPT },
-              { type: "image_url", image_url: { url: data.imageDataUrl } },
+            parts: [
+              {
+                inlineData: {
+                  mimeType,
+                  data: base64Data,
+                },
+              },
+              {
+                text: "Extract the full menu from this photo.",
+              },
             ],
           },
         ],
+        generationConfig: {
+          responseMimeType: "application/json",
+          maxOutputTokens: 4096,
+        },
       }),
     });
 
     if (response.status === 429) {
       throw new Error("The AI is a bit busy right now. Please try again in a moment.");
     }
-    if (response.status === 402) {
-      throw new Error("AI credits are exhausted. Please add credits to your workspace.");
-    }
     if (!response.ok) {
       const body = await response.text().catch(() => "");
-      console.error("AI gateway error", response.status, body);
+      console.error("Gemini API error", response.status, body);
+      if (response.status === 400 || response.status === 403) {
+        if (body.includes("API key not valid") || body.includes("API_KEY_INVALID")) {
+          throw new Error("Invalid Gemini API key. Check VITE_GEMINI_API_KEY in your .env file.");
+        }
+        throw new Error(`Gemini API Error (${response.status}): ${body}`);
+      }
       throw new Error("Couldn't read the menu photo. Please try again.");
     }
 
     const payload = (await response.json()) as {
-      choices?: { message?: { content?: string } }[];
+      candidates?: { content?: { parts?: { text?: string }[] } }[];
     };
-    let text = payload.choices?.[0]?.message?.content ?? "";
+
+    // Gemini returns candidates → content → parts — grab the first text part
+    let text = payload.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
     text = text
       .trim()
       .replace(/^```(?:json)?\s*/i, "")

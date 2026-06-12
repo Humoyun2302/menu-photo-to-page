@@ -237,6 +237,15 @@ function Index() {
           </div>
         </header>
 
+        {menu.isDemo ? (
+          <div className="bg-primary/5 border-b border-primary/10 px-4 py-3.5 text-center text-sm text-primary flex items-center justify-center gap-2">
+            <Sparkles className="h-4.5 w-4.5 shrink-0 animate-pulse" />
+            <span>
+              <strong>Demo Mode:</strong> Using a fallback menu because a valid Gemini API key is missing. Set a valid <code>VITE_GEMINI_API_KEY</code> in your <code>.env</code> file for real AI extraction.
+            </span>
+          </div>
+        ) : null}
+
         <div className="mx-auto max-w-3xl space-y-8 px-4 pt-8">
           <p className="text-sm text-muted-foreground">
             Fix anything the AI misread, then publish to get your shareable page and QR

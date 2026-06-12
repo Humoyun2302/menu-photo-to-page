@@ -1,30 +1,13 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useRef, useState } from "react";
-import {
-  ArrowLeft,
-  ArrowRight,
-  Camera,
-  Loader2,
-  Plus,
-  ScanLine,
-  Sparkles,
-  Trash2,
-  UtensilsCrossed,
-} from "lucide-react";
+import { Camera, Loader2, ScanLine, Sparkles, UtensilsCrossed } from "lucide-react";
 
 import heroImage from "@/assets/hero-menu.jpg";
+import { MenuEditor } from "@/components/menu/MenuEditor";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { extractMenu } from "@/lib/menu/extract.functions";
-import {
-  createId,
-  saveMenu,
-  withIds,
-  type MenuCategory,
-  type MenuData,
-  type MenuItem,
-} from "@/lib/menu/menu-data";
+import { fileToDataUrl, isImageFile } from "@/lib/menu/image-utils";
+import { withIds, type MenuData } from "@/lib/menu/menu-data";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -48,31 +31,7 @@ export const Route = createFileRoute("/")({
 
 type Stage = "upload" | "processing" | "edit";
 
-async function fileToDataUrl(file: File): Promise<string> {
-  const objectUrl = URL.createObjectURL(file);
-  try {
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const image = new Image();
-      image.onload = () => resolve(image);
-      image.onerror = () => reject(new Error("Could not load image"));
-      image.src = objectUrl;
-    });
-    const maxDimension = 1600;
-    const scale = Math.min(1, maxDimension / Math.max(img.width, img.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(img.width * scale));
-    canvas.height = Math.max(1, Math.round(img.height * scale));
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("Canvas unavailable");
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL("image/jpeg", 0.85);
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
-}
-
 function Index() {
-  const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [stage, setStage] = useState<Stage>("upload");
   const [preview, setPreview] = useState<string | null>(null);
@@ -82,7 +41,7 @@ function Index() {
 
   const handleFile = async (file: File | null | undefined) => {
     if (!file) return;
-    if (!/^image\/(png|jpe?g|webp)$/.test(file.type)) {
+    if (!isImageFile(file)) {
       setError("Please upload a JPG or PNG photo of your menu.");
       return;
     }
@@ -110,74 +69,6 @@ function Index() {
       );
       setStage("upload");
     }
-  };
-
-  const updateMenu = (updater: (current: MenuData) => MenuData) =>
-    setMenu((current) => (current ? updater(current) : current));
-
-  const updateCategory = (categoryId: string, patch: Partial<MenuCategory>) =>
-    updateMenu((m) => ({
-      ...m,
-      categories: m.categories.map((c) => (c.id === categoryId ? { ...c, ...patch } : c)),
-    }));
-
-  const removeCategory = (categoryId: string) =>
-    updateMenu((m) => ({
-      ...m,
-      categories: m.categories.filter((c) => c.id !== categoryId),
-    }));
-
-  const addCategory = () =>
-    updateMenu((m) => ({
-      ...m,
-      categories: [
-        ...m.categories,
-        { id: createId(6), name: "New section", items: [] },
-      ],
-    }));
-
-  const updateItem = (categoryId: string, itemId: string, patch: Partial<MenuItem>) =>
-    updateMenu((m) => ({
-      ...m,
-      categories: m.categories.map((c) =>
-        c.id === categoryId
-          ? {
-              ...c,
-              items: c.items.map((i) => (i.id === itemId ? { ...i, ...patch } : i)),
-            }
-          : c,
-      ),
-    }));
-
-  const removeItem = (categoryId: string, itemId: string) =>
-    updateMenu((m) => ({
-      ...m,
-      categories: m.categories.map((c) =>
-        c.id === categoryId ? { ...c, items: c.items.filter((i) => i.id !== itemId) } : c,
-      ),
-    }));
-
-  const addItem = (categoryId: string) =>
-    updateMenu((m) => ({
-      ...m,
-      categories: m.categories.map((c) =>
-        c.id === categoryId
-          ? {
-              ...c,
-              items: [
-                ...c.items,
-                { id: createId(6), name: "", description: "", price: "" },
-              ],
-            }
-          : c,
-      ),
-    }));
-
-  const handlePublish = () => {
-    if (!menu) return;
-    const id = createId();
-    saveMenu(id, menu);
-    navigate({ to: "/menu/$menuId", params: { menuId: id } });
   };
 
   if (stage === "processing") {
@@ -213,148 +104,13 @@ function Index() {
 
   if (stage === "edit" && menu) {
     return (
-      <main className="min-h-screen pb-24">
-        <header className="sticky top-0 z-20 border-b bg-background/85 backdrop-blur">
-          <div className="mx-auto grid max-w-3xl grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 sm:flex sm:justify-between">
-            <div className="flex min-w-0 items-center gap-3">
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Back to upload"
-                onClick={() => setStage("upload")}
-                className="shrink-0"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
-              <h1 className="truncate font-display text-lg font-semibold sm:text-xl">
-                Review &amp; edit your menu
-              </h1>
-            </div>
-            <Button onClick={handlePublish} className="shrink-0">
-              Publish menu
-              <ArrowRight className="ml-1.5 h-4 w-4" />
-            </Button>
-          </div>
-        </header>
-
-        {menu.isDemo ? (
-          <div className="bg-primary/5 border-b border-primary/10 px-4 py-3.5 text-center text-sm text-primary flex items-center justify-center gap-2">
-            <Sparkles className="h-4.5 w-4.5 shrink-0 animate-pulse" />
-            <span>
-              <strong>Demo Mode:</strong> Using a fallback menu because a valid Gemini API key is missing. Set a valid <code>VITE_GEMINI_API_KEY</code> in your <code>.env</code> file for real AI extraction.
-            </span>
-          </div>
-        ) : null}
-
-        <div className="mx-auto max-w-3xl space-y-8 px-4 pt-8">
-          <p className="text-sm text-muted-foreground">
-            Fix anything the AI misread, then publish to get your shareable page and QR
-            code.
-          </p>
-
-          <div className="space-y-2">
-            <label
-              htmlFor="restaurant-name"
-              className="text-xs font-medium tracking-widest text-muted-foreground uppercase"
-            >
-              Restaurant name
-            </label>
-            <Input
-              id="restaurant-name"
-              value={menu.restaurantName}
-              onChange={(e) => updateMenu((m) => ({ ...m, restaurantName: e.target.value }))}
-              className="h-14 font-display text-2xl font-semibold"
-            />
-          </div>
-
-          {menu.categories.map((category) => (
-            <section
-              key={category.id}
-              className="space-y-4 rounded-xl border bg-card p-4 shadow-card sm:p-6"
-            >
-              <div className="flex items-center gap-2">
-                <Input
-                  value={category.name}
-                  onChange={(e) => updateCategory(category.id, { name: e.target.value })}
-                  aria-label="Section name"
-                  className="h-11 min-w-0 font-display text-lg font-semibold"
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Remove section"
-                  className="shrink-0 text-muted-foreground hover:text-destructive"
-                  onClick={() => removeCategory(category.id)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-
-              <div className="space-y-3">
-                {category.items.map((item) => (
-                  <div key={item.id} className="space-y-2 rounded-lg border bg-background/50 p-3">
-                    <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2">
-                      <Input
-                        value={item.name}
-                        placeholder="Dish name"
-                        aria-label="Dish name"
-                        onChange={(e) =>
-                          updateItem(category.id, item.id, { name: e.target.value })
-                        }
-                        className="min-w-0 font-medium"
-                      />
-                      <Input
-                        value={item.price}
-                        placeholder="$0.00"
-                        aria-label="Price"
-                        onChange={(e) =>
-                          updateItem(category.id, item.id, { price: e.target.value })
-                        }
-                        className="w-24 text-right"
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label="Remove item"
-                        className="shrink-0 text-muted-foreground hover:text-destructive"
-                        onClick={() => removeItem(category.id, item.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <Textarea
-                      value={item.description}
-                      placeholder="Description (optional)"
-                      aria-label="Description"
-                      rows={2}
-                      onChange={(e) =>
-                        updateItem(category.id, item.id, { description: e.target.value })
-                      }
-                      className="min-h-0 resize-none text-sm"
-                    />
-                  </div>
-                ))}
-              </div>
-
-              <Button variant="secondary" size="sm" onClick={() => addItem(category.id)}>
-                <Plus className="mr-1.5 h-4 w-4" />
-                Add item
-              </Button>
-            </section>
-          ))}
-
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <Button variant="outline" onClick={addCategory}>
-              <Plus className="mr-1.5 h-4 w-4" />
-              Add section
-            </Button>
-            <Button onClick={handlePublish} size="lg">
-              Publish menu
-              <ArrowRight className="ml-1.5 h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </main>
+      <MenuEditor
+        initialMenu={menu}
+        onBack={() => {
+          setStage("upload");
+          setMenu(null);
+        }}
+      />
     );
   }
 
@@ -381,16 +137,16 @@ function Index() {
         <div className="grid flex-1 items-center gap-12 py-12 lg:grid-cols-[1.1fr_1fr]">
           <div className="animate-fade-up max-w-xl">
             <p className="mb-4 text-xs font-medium tracking-[0.3em] text-primary uppercase">
-              AI menu digitizer
+              AI menu studio
             </p>
             <h1 className="font-display text-4xl leading-tight font-semibold sm:text-5xl lg:text-6xl">
               Your paper menu, reborn as a{" "}
               <em className="text-primary">digital page</em>.
             </h1>
             <p className="mt-5 text-lg text-muted-foreground">
-              Snap a photo of your menu. MenuSnap's AI reads every dish, description and
-              price — then hands you a beautiful mobile menu with a QR code your guests
-              can scan.
+              Snap a photo — AI extracts every dish in seconds. Then polish it in our
+              drag-and-drop studio with live preview, product-card editing, and
+              marketplace-style templates before you share via QR.
             </p>
             <ol className="mt-8 flex flex-col gap-3 text-sm text-muted-foreground sm:flex-row sm:gap-8">
               <li className="flex items-center gap-2">

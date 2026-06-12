@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as MenuMenuIdRouteImport } from './routes/menu.$menuId'
+import { Route as EditMenuIdRouteImport } from './routes/edit.$menuId'
 
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
@@ -28,34 +29,43 @@ const MenuMenuIdRoute = MenuMenuIdRouteImport.update({
   path: '/menu/$menuId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EditMenuIdRoute = EditMenuIdRouteImport.update({
+  id: '/edit/$menuId',
+  path: '/edit/$menuId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/edit/$menuId': typeof EditMenuIdRoute
   '/menu/$menuId': typeof MenuMenuIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/edit/$menuId': typeof EditMenuIdRoute
   '/menu/$menuId': typeof MenuMenuIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/edit/$menuId': typeof EditMenuIdRoute
   '/menu/$menuId': typeof MenuMenuIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/sitemap.xml' | '/menu/$menuId'
+  fullPaths: '/' | '/sitemap.xml' | '/edit/$menuId' | '/menu/$menuId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/sitemap.xml' | '/menu/$menuId'
-  id: '__root__' | '/' | '/sitemap.xml' | '/menu/$menuId'
+  to: '/' | '/sitemap.xml' | '/edit/$menuId' | '/menu/$menuId'
+  id: '__root__' | '/' | '/sitemap.xml' | '/edit/$menuId' | '/menu/$menuId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  EditMenuIdRoute: typeof EditMenuIdRoute
   MenuMenuIdRoute: typeof MenuMenuIdRoute
 }
 
@@ -82,12 +92,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MenuMenuIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/edit/$menuId': {
+      id: '/edit/$menuId'
+      path: '/edit/$menuId'
+      fullPath: '/edit/$menuId'
+      preLoaderRoute: typeof EditMenuIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
+  EditMenuIdRoute: EditMenuIdRoute,
   MenuMenuIdRoute: MenuMenuIdRoute,
 }
 export const routeTree = rootRouteImport

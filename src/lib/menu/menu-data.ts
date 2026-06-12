@@ -1,11 +1,24 @@
 import lzString from "lz-string";
+
+import { DEFAULT_TEMPLATE_ID, migrateTemplateId } from "./templates";
+import type { MenuTemplateId } from "./templates";
+import { isMenuCustomTheme, type MenuCustomTheme } from "./templates/custom-theme";
+
 const { compressToEncodedURIComponent, decompressFromEncodedURIComponent } = lzString;
+
+export interface MenuItemAction {
+  label: string;
+  href?: string;
+}
 
 export interface MenuItem {
   id: string;
   name: string;
   description: string;
   price: string;
+  imageUrl?: string;
+  tags?: string[];
+  actions?: MenuItemAction[];
 }
 
 export interface MenuCategory {
@@ -17,6 +30,9 @@ export interface MenuCategory {
 export interface MenuData {
   restaurantName: string;
   categories: MenuCategory[];
+  templateId?: MenuTemplateId;
+  customTheme?: MenuCustomTheme;
+  backgroundImageUrl?: string;
   isDemo?: boolean;
 }
 
@@ -38,9 +54,30 @@ export function createId(length = 8): string {
   return id;
 }
 
-export function withIds(raw: ExtractedMenu): MenuData {
+function resolveTemplateId(menu: MenuData): MenuTemplateId {
+  const customTheme =
+    menu.customTheme && isMenuCustomTheme(menu.customTheme) ? menu.customTheme : undefined;
+  if (menu.templateId === "custom" && customTheme) return "custom";
+  return migrateTemplateId(menu.templateId ?? DEFAULT_TEMPLATE_ID);
+}
+
+export function normalizeMenu(menu: MenuData): MenuData {
+  const customTheme =
+    menu.customTheme && isMenuCustomTheme(menu.customTheme) ? menu.customTheme : undefined;
+
   return {
+    ...menu,
+    restaurantName: menu.restaurantName?.trim() || "My Restaurant",
+    templateId: resolveTemplateId({ ...menu, customTheme }),
+    customTheme,
+    categories: Array.isArray(menu.categories) ? menu.categories : [],
+  };
+}
+
+export function withIds(raw: ExtractedMenu): MenuData {
+  return normalizeMenu({
     restaurantName: raw.restaurantName || "My Restaurant",
+    templateId: DEFAULT_TEMPLATE_ID,
     categories: raw.categories.map((category) => ({
       id: createId(6),
       name: category.name,
@@ -52,7 +89,7 @@ export function withIds(raw: ExtractedMenu): MenuData {
       })),
     })),
     isDemo: raw.isDemo,
-  };
+  });
 }
 
 const storageKey = (id: string) => `menusnap:${id}`;
@@ -71,7 +108,7 @@ export function loadMenu(id: string): MenuData | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as MenuData;
     if (!parsed || !Array.isArray(parsed.categories)) return null;
-    return parsed;
+    return normalizeMenu(parsed);
   } catch {
     return null;
   }
@@ -88,7 +125,7 @@ export function decodeMenu(encoded: string): MenuData | null {
     if (!json) return null;
     const parsed = JSON.parse(json) as MenuData;
     if (!parsed || !Array.isArray(parsed.categories)) return null;
-    return parsed;
+    return normalizeMenu(parsed);
   } catch {
     return null;
   }

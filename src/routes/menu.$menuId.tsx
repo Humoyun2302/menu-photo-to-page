@@ -6,13 +6,13 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
-  decodeMenu,
-  encodeMenu,
   loadMenu,
   normalizeMenu,
   saveMenu,
   type MenuData,
 } from "@/lib/menu/menu-data";
+import { buildShareUrl, decodeSharePayload, parseShareHash } from "@/lib/menu/menu-share-codec";
+import { fetchPublishedMenu, publishMenu } from "@/lib/menu/publish.functions";
 import { getQrColors, getTemplate, resolveTemplateId } from "@/lib/menu/templates";
 import { ShareSection } from "@/lib/menu/templates/share-section";
 
@@ -40,26 +40,56 @@ function MenuPage() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    let found = loadMenu(menuId);
-    if (!found) {
-      const match = window.location.hash.match(/[#&]d=([^&]+)/);
-      if (match) {
-        found = decodeMenu(match[1]);
-        if (found) saveMenu(menuId, found);
-      }
-    }
-    if (found) {
-      const normalized = normalizeMenu(found);
-      setMenu(normalized);
-      setState("ready");
+    let cancelled = false;
 
-      const hash = `d=${encodeMenu(normalized)}`;
-      if (!window.location.hash.includes("d=")) {
-        window.history.replaceState(null, "", `${window.location.pathname}#${hash}`);
+    async function load() {
+      let found = loadMenu(menuId);
+      let fromHash = false;
+
+      if (!found) {
+        try {
+          found = await fetchPublishedMenu({ data: { menuId } });
+        } catch {
+          // cloud fetch unavailable
+        }
       }
-    } else {
-      setState("missing");
+
+      if (!found) {
+        const encoded = parseShareHash(window.location.hash);
+        if (encoded) {
+          found = decodeSharePayload(encoded);
+          fromHash = !!found;
+        }
+      }
+
+      if (cancelled) return;
+
+      if (found) {
+        const normalized = normalizeMenu(found);
+        saveMenu(menuId, normalized);
+        setMenu(normalized);
+        setState("ready");
+
+        if (fromHash) {
+          try {
+            await publishMenu({ data: { menuId, menu: normalized } });
+          } catch {
+            // keep hash fallback available offline
+          }
+        }
+
+        if (window.location.hash) {
+          window.history.replaceState(null, "", window.location.pathname);
+        }
+      } else {
+        setState("missing");
+      }
     }
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
   }, [menuId]);
 
   const template = useMemo(() => (menu ? getTemplate(menu.templateId, menu) : null), [menu]);
@@ -68,7 +98,7 @@ function MenuPage() {
 
   const shareUrl = useMemo(() => {
     if (!menu) return "";
-    return `${window.location.origin}/menu/${menuId}#d=${encodeMenu(menu)}`;
+    return buildShareUrl(window.location.origin, menuId);
   }, [menu, menuId]);
 
   useEffect(() => {
@@ -107,8 +137,7 @@ function MenuPage() {
         <UtensilsCrossed className="h-10 w-10 text-primary" />
         <h1 className="font-display text-3xl font-semibold">Menu not found</h1>
         <p className="max-w-sm text-muted-foreground">
-          This menu isn't stored on this device and the link doesn't include the menu
-          data. Ask the owner to share their full QR code or link.
+          This menu may have expired or the link is invalid. Ask the owner to publish again.
         </p>
         <Button asChild>
           <Link to="/">

@@ -4,7 +4,9 @@ import { Sparkles, UtensilsCrossed } from "lucide-react";
 
 import { MenuEditor } from "@/components/menu/MenuEditor";
 import { Button } from "@/components/ui/button";
-import { decodeMenu, loadMenu, type MenuData } from "@/lib/menu/menu-data";
+import { loadMenu, type MenuData } from "@/lib/menu/menu-data";
+import { decodeSharePayload, parseShareHash } from "@/lib/menu/menu-share-codec";
+import { fetchPublishedMenu } from "@/lib/menu/publish.functions";
 
 export const Route = createFileRoute("/edit/$menuId")({
   head: () => ({
@@ -22,13 +24,34 @@ function EditMenuPage() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    let found = loadMenu(menuId);
-    if (!found) {
-      const match = window.location.hash.match(/[#&]d=([^&]+)/);
-      if (match) found = decodeMenu(match[1]);
+    let cancelled = false;
+
+    async function load() {
+      let found = loadMenu(menuId);
+
+      if (!found) {
+        try {
+          found = await fetchPublishedMenu({ data: { menuId } });
+        } catch {
+          // cloud fetch unavailable
+        }
+      }
+
+      if (!found) {
+        const encoded = parseShareHash(window.location.hash);
+        if (encoded) found = decodeSharePayload(encoded);
+      }
+
+      if (!cancelled) {
+        setMenu(found);
+        setReady(true);
+      }
     }
-    setMenu(found);
-    setReady(true);
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
   }, [menuId]);
 
   if (!ready) {

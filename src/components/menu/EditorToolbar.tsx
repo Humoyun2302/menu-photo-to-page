@@ -29,6 +29,7 @@ interface EditorToolbarProps {
   onRedo: () => void;
   onTogglePreview: () => void;
   onPublish: () => void;
+  isPublishing?: boolean;
 }
 
 export function EditorToolbar({
@@ -43,6 +44,7 @@ export function EditorToolbar({
   onRedo,
   onTogglePreview,
   onPublish,
+  isPublishing = false,
 }: EditorToolbarProps) {
   return (
     <header className="sticky top-0 z-30 border-b bg-background/90 backdrop-blur-md">
@@ -112,8 +114,13 @@ export function EditorToolbar({
           </div>
         </TooltipProvider>
 
-        <Button onClick={onPublish} size="sm" className="shrink-0 shadow-glow">
-          Publish
+        <Button
+          onClick={onPublish}
+          size="sm"
+          className="shrink-0 shadow-glow"
+          disabled={isPublishing}
+        >
+          {isPublishing ? "Publishing…" : "Publish"}
           <ArrowRight className="ml-1.5 h-4 w-4" />
         </Button>
       </div>

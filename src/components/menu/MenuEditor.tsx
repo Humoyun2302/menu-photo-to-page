@@ -15,11 +15,12 @@ import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { useMenuEditor } from "@/hooks/use-menu-editor";
 import {
   createId,
-  encodeMenu,
   normalizeMenu,
   saveMenu,
   type MenuData,
 } from "@/lib/menu/menu-data";
+import { encodeMenuCompact } from "@/lib/menu/menu-share-codec";
+import { publishMenu } from "@/lib/menu/publish.functions";
 import { DEFAULT_TEMPLATE_ID, type MenuTemplateId } from "@/lib/menu/templates";
 import { cn } from "@/lib/utils";
 
@@ -37,6 +38,7 @@ export function MenuEditor({ initialMenu, draftId, onBack }: MenuEditorProps) {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [showMobilePreview, setShowMobilePreview] = useState(false);
   const [activeTab, setActiveTab] = useState<"items" | "style">("items");
+  const [publishing, setPublishing] = useState(false);
 
   const selectedItem = useMemo(() => {
     if (!selectedItemId) return null;
@@ -66,7 +68,7 @@ export function MenuEditor({ initialMenu, draftId, onBack }: MenuEditorProps) {
     setSelectedItemId(null);
   }, [actions, selectedItem]);
 
-  const handlePublish = () => {
+  const handlePublish = async () => {
     const trimmedName = menu.restaurantName.trim();
     const hasItems = menu.categories.some((c) => c.items.some((i) => i.name.trim()));
     if (!trimmedName) {
@@ -81,11 +83,24 @@ export function MenuEditor({ initialMenu, draftId, onBack }: MenuEditorProps) {
     const id = createId();
     const finalMenu = normalizeMenu(menu);
     saveMenu(id, finalMenu);
-    navigate({
-      to: "/menu/$menuId",
-      params: { menuId: id },
-      hash: `d=${encodeMenu(finalMenu)}`,
-    });
+    setPublishing(true);
+
+    try {
+      await publishMenu({ data: { menuId: id, menu: finalMenu } });
+      navigate({
+        to: "/menu/$menuId",
+        params: { menuId: id },
+      });
+    } catch {
+      navigate({
+        to: "/menu/$menuId",
+        params: { menuId: id },
+        hash: `d=${encodeMenuCompact(finalMenu)}`,
+      });
+      toast.message("Published with a compact backup link — redeploy on Netlify for the shortest URLs.");
+    } finally {
+      setPublishing(false);
+    }
   };
 
   const forceSave = useCallback(() => {
@@ -120,6 +135,7 @@ export function MenuEditor({ initialMenu, draftId, onBack }: MenuEditorProps) {
         onRedo={actions.redo}
         onTogglePreview={() => setShowMobilePreview((v) => !v)}
         onPublish={handlePublish}
+        isPublishing={publishing}
       />
 
       {menu.isDemo ? (
